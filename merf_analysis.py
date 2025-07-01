@@ -9,9 +9,9 @@ import seaborn as sns
 # --- 1. 数据加载与初步探索 ---
 print("--- 1. 数据加载与初步探索 ---")
 try:
-    df_original = pd.read_csv('data.csv') 
+    df_original = pd.read_csv('data/data.csv') 
 except FileNotFoundError:
-    print("错误：找不到 data.csv 文件。请确保文件与脚本在同一目录下。")
+    print("错误：找不到 data.csv 文件。")
     exit()
 
 print(f"数据集原始形状: {df_original.shape}")
@@ -136,6 +136,11 @@ print("\n--- 5. 训练和评估 MERF 模型 ---")
 rf_fixed_effects_model = RandomForestRegressor(n_estimators=300, max_features=0.3, min_samples_leaf=5, random_state=42, n_jobs=-1)
 merf_model = MERF(fixed_effects_model=rf_fixed_effects_model,max_iterations=50)
 merf_model.fit(X_train, Z_train, clusters_train, y_train)
+# 保存MERF训练过程的GLL历史
+if hasattr(merf_model, 'gll_history_'):
+    pd.DataFrame({'iteration': list(range(1, len(merf_model.gll_history_)+1)), 'GLL': merf_model.gll_history_}).to_csv('merf_training_history.csv', index=False)
+
+# 预测与评估
 y_pred_merf = merf_model.predict(X_test, Z_test, clusters_test)
 rmse_merf = np.sqrt(mean_squared_error(y_test, y_pred_merf))
 mae_merf = mean_absolute_error(y_test, y_pred_merf)
@@ -144,6 +149,19 @@ print("MERF 模型性能:")
 print(f"  R-squared (R²): {r2_merf:.4f}")
 print(f"  RMSE: {rmse_merf:.4f}")
 print(f"  MAE: {mae_merf:.4f}")
+# 保存MERF预测结果
+merf_results = pd.DataFrame({
+    'ID': test_df[CLUSTER].values,
+    'Actual_CF': y_test.values,
+    'MERF_Predicted_CF': y_pred_merf
+})
+merf_results.to_csv('merf_predictions.csv', index=False)
+# 保存MERF评估指标
+with open('merf_metrics.txt', 'w', encoding='utf-8') as f:
+    f.write(f"MERF 模型性能:\n")
+    f.write(f"R-squared (R²): {r2_merf:.4f}\n")
+    f.write(f"RMSE: {rmse_merf:.4f}\n")
+    f.write(f"MAE: {mae_merf:.4f}\n")
 
 
 # --- 6. 训练和评估基线模型 (标准随机森林) ---
@@ -160,6 +178,19 @@ print(f"  RMSE: {rmse_rf:.4f}")
 print(f"  MAE: {mae_rf:.4f}")
 if r2_rf != 0:
     print(f"\n性能对比: MERF的R²比标准RF高出 {((r2_merf - r2_rf) / abs(r2_rf)) * 100:.2f}%")
+# 保存RF预测结果
+rf_results = pd.DataFrame({
+    'ID': test_df[CLUSTER].values,
+    'Actual_CF': y_test.values,
+    'RF_Predicted_CF': y_pred_rf
+})
+rf_results.to_csv('rf_predictions.csv', index=False)
+# 保存RF评估指标
+with open('rf_metrics.txt', 'w', encoding='utf-8') as f:
+    f.write(f"RF 模型性能:\n")
+    f.write(f"R-squared (R²): {r2_rf:.4f}\n")
+    f.write(f"RMSE: {rmse_rf:.4f}\n")
+    f.write(f"MAE: {mae_rf:.4f}\n")
 
 
 # --- 7. 结果解读 ---
@@ -179,7 +210,7 @@ plt.title('MERF - Top 15 Feature Importances (Fixed Effects) - CHARLS only')
 plt.xlabel('Importance')
 plt.ylabel('Feature')
 plt.tight_layout()
-plt.savefig('figures/feature_importance.png')
+plt.savefig('results/feature_importance.png')
 # plt.show()
 
 # b. 随机效应解读 (Random Effects)
@@ -198,7 +229,7 @@ plt.xlabel('Random Intercept Value (b_i)')
 plt.ylabel('Frequency')
 plt.axvline(0, color='red', linestyle='--', label='Population Mean')
 plt.legend()
-plt.savefig('figures/random_effects_distribution.png')
+plt.savefig('results/random_effects_distribution.png')
 # plt.show()
 print("\n认知基线最高的5个个体:")
 print(random_effects_df.sort_values('re', ascending=False).head(5))
@@ -216,7 +247,7 @@ plt.ylabel('Predicted CF Score')
 plt.title('Prediction Accuracy: MERF vs. Standard RF - CHARLS only')
 plt.legend()
 plt.grid(True)
-plt.savefig('figures/prediction_comparison.png')
+plt.savefig('results/prediction_comparison.png')
 # plt.show()
 
 print("\n--- 代码执行完毕 ---")
